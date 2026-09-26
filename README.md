@@ -11,7 +11,7 @@ Implémentation du classifieur k plus proches voisins sans bibliothèque de mach
 
 ## Reporting
 
-- **Live dashboard :** [fryzim.github.io/KNN-Classifier](https://fryzim.github.io/KNN-Classifier/) — accuracy vs k, effet de la réduction du dataset, comparatif des 4 approches (source dans `docs/index.html`). Chiffres obtenus en exécutant réellement `src/` sur un échantillon de 1300 lignes du dataset (voir `generate_report_data.py`), pas de valeurs inventées.
+- **Dashboard web interactif :** [fryzim.github.io/KNN-Classifier](https://fryzim.github.io/KNN-Classifier/) — page HTML/Chart.js (pas un rapport Power BI) : accuracy vs k, effet de la réduction du dataset, comparatif des 4 approches. Chiffres obtenus en exécutant réellement `src/` sur un échantillon de 1300 lignes du dataset (voir `generate_report_data.py`), pas de valeurs inventées.
 - **Power Query :** `reporting/power_query.m` — charge et type `waveform.data.csv` (fichier sans en-tête) pour Power BI/Excel.
 
 **À noter :** la cross-validation du kd-tree (`src/kdtree.py`) retient le **maximum** des folds pour chaque k plutôt que la moyenne (comportement du notebook original, conservé tel quel) — son score de CV n'est donc pas directement comparable à celui des 3 autres approches, qui utilisent la moyenne. L'accuracy sur le test set, elle, reste comparable entre les 4.
