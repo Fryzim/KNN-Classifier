@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>k-NN From Scratch — Reporting</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    color-scheme: light;
+    --surface-1: #fcfcfb; --page: #f9f9f7; --text-primary: #0b0b0b; --text-secondary: #52514e;
+    --muted: #898781; --grid: #e1e0d9; --baseline: #c3c2b7; --border: rgba(11,11,11,0.10); --card-bg: #ffffff;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:where(:not([data-theme="light"])) {
+      color-scheme: dark;
+      --surface-1: #1a1a19; --page: #0d0d0d; --text-primary: #ffffff; --text-secondary: #c3c2b7;
+      --muted: #898781; --grid: #2c2c2a; --baseline: #383835; --border: rgba(255,255,255,0.10); --card-bg: #201f1d;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --surface-1: #1a1a19; --page: #0d0d0d; --text-primary: #ffffff; --text-secondary: #c3c2b7;
+    --muted: #898781; --grid: #2c2c2a; --baseline: #383835; --border: rgba(255,255,255,0.10); --card-bg: #201f1d;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; background: var(--page); color: var(--text-primary); }
+  header { padding: 28px 24px 8px; max-width: 1100px; margin: 0 auto; position: relative; }
+  header h1 { font-size: 1.5rem; margin: 0 0 4px; }
+  header p { color: var(--text-secondary); margin: 0 0 16px; max-width: 75ch; }
+  .theme-toggle { position: absolute; top: 24px; right: 24px; border: 1px solid var(--border); background: var(--card-bg);
+    color: var(--text-primary); border-radius: 8px; padding: 6px 12px; cursor: pointer; font-size: 0.85rem; }
+  main { max-width: 1100px; margin: 0 auto; padding: 0 24px 60px; }
+  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px,1fr)); gap: 12px; margin-bottom: 24px; }
+  .kpi { background: var(--card-bg); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; }
+  .kpi .value { font-size: 1.5rem; font-weight: 600; }
+  .kpi .label { color: var(--text-secondary); font-size: 0.78rem; }
+  section { background: var(--card-bg); border: 1px solid var(--border); border-radius: 12px; padding: 20px; margin-bottom: 20px; }
+  section h2 { font-size: 1.05rem; margin: 0 0 4px; }
+  section .sub { color: var(--text-secondary); font-size: 0.85rem; margin: 0 0 14px; }
+  .chart-wrap { position: relative; height: 300px; }
+  .metric-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px,1fr)); gap: 16px; }
+  .metric-panel h3 { font-size: 0.82rem; margin: 0 0 8px; color: var(--text-secondary); }
+  table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+  th, td { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--grid); }
+  th { color: var(--text-secondary); font-weight: 600; }
+  footer { max-width: 1100px; margin: 0 auto; padding: 10px 24px 40px; color: var(--muted); font-size: 0.8rem; }
+  footer a { color: inherit; }
+</style>
+</head>
+<body>
+<button class="theme-toggle" id="themeToggle">🌓 Thème</button>
+<header>
+  <h1>k-NN From Scratch — Reporting</h1>
+  <p>Résultats calculés sur un échantillon réel de 1300 lignes (train=1000, test=300) tiré du dataset Waveform complet (5,000 lignes) — sous-échantillonné pour ce rapport, mêmes données réelles. Voir le <a href="https://github.com/Fryzim/KNN-Classifier">code source</a>.</p>
+</header>
+<main>
+  <div class="kpis">
+    <div class="kpi"><div class="value">85.0%</div><div class="label">accuracy test (baseline, k=35)</div></div>
+    <div class="kpi"><div class="value">1000 → 207</div><div class="label">taille après réduction (-79%)</div></div>
+    <div class="kpi"><div class="value">85.0%</div><div class="label">meilleure accuracy test (toutes variantes)</div></div>
+    <div class="kpi"><div class="value">86%</div><div class="label">Bayes optimal (référence théorique)</div></div>
+  </div>
+
+  <section>
+    <h2>Précision en cross-validation selon k (baseline)</h2>
+    <p class="sub">k-NN vectorisé, 3-fold CV sur les 1000 points d'entraînement. Meilleur k = 35.</p>
+    <div class="chart-wrap"><canvas id="chartK"></canvas></div>
+  </section>
+
+  <section>
+    <h2>Réduction du dataset d'entraînement</h2>
+    <p class="sub">Application successive de deux règles : suppression de la zone de biais, puis condensing (ne garder que les points nécessaires à la classification).</p>
+    <div class="chart-wrap" style="height:220px"><canvas id="chartReduction"></canvas></div>
+  </section>
+
+  <section>
+    <h2>Comparaison des 4 approches</h2>
+    <p class="sub">Baseline (cdist vectorisé) vs. les 3 optimisations : distances précalculées, inégalité triangulaire, kd-tree.</p>
+    <div class="metric-grid" id="metricGrid"></div>
+    <table style="margin-top:16px">
+      <thead><tr><th>Approche</th><th>Meilleur k</th><th>Accuracy CV</th><th>Accuracy test</th><th>Temps CV (s)</th></tr></thead>
+      <tbody id="summaryTable"></tbody>
+    </table>
+  </section>
+</main>
+<footer>Résultats générés en exécutant réellement <code>src/</code> sur un échantillon du dataset — pas de valeurs simulées. <a href="https://github.com/Fryzim/KNN-Classifier">Retour au dépôt</a>.</footer>
+
+<script>
+const DATA = {"sample": {"n_train": 1000, "n_test": 300, "n_full_dataset": 5000}, "baseline": {"k_values": [1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29, 31, 33, 35, 37, 39, 41, 43, 45, 47, 49], "mean_accuracies": {"1": 0.7628, "3": 0.7968, "5": 0.8098, "7": 0.8198, "9": 0.8268, "11": 0.8368, "13": 0.8338, "15": 0.8398, "17": 0.8418, "19": 0.8398, "21": 0.8408, "23": 0.8408, "25": 0.8378, "27": 0.8388, "29": 0.8448, "31": 0.8408, "33": 0.8468, "35": 0.8559, "37": 0.8498, "39": 0.8458, "41": 0.8428, "43": 0.8418, "45": 0.8418, "47": 0.8418, "49": 0.8398}, "best_k": 35, "best_accuracy_cv": 0.8559, "final_accuracy": 0.85, "time_s": 11.53}, "reduction": {"n_before": 1000, "n_after_bias_removal": 792, "n_after_condensing": 207, "time_s": 7.62}, "pipelines": {"precomputed": {"best_k": 45, "best_accuracy_cv": 0.8470000000000001, "final_accuracy": 0.8366666666666667, "time_s": 1.89}, "triangle": {"best_k": 21, "best_accuracy_cv": 0.8480000000000001, "final_accuracy": 0.8433333333333334, "time_s": 5.11}, "kdtree": {"best_k": 35, "best_accuracy_cv": 0.8888888888888888, "final_accuracy": 0.85, "time_s": 193.24}}};
+const PIPE_LIGHT = {"baseline": "#2a78d6", "precomputed": "#eb6834", "triangle": "#1baf7a", "kdtree": "#008300"};
+const PIPE_DARK = {"baseline": "#3987e5", "precomputed": "#d95926", "triangle": "#199e70", "kdtree": "#008300"};
+const PIPE_LABELS = {"baseline": "Baseline (vectoris\u00e9)", "precomputed": "Distances pr\u00e9calcul\u00e9es", "triangle": "In\u00e9galit\u00e9 triangulaire", "kdtree": "kd-tree"};
+const PIPE_ORDER = ['baseline', 'precomputed', 'triangle', 'kdtree'];
+
+function isDark() {
+  const t = document.documentElement.getAttribute('data-theme');
+  if (t === 'dark') return true;
+  if (t === 'light') return false;
+  return window.matchMedia('(prefers-color-scheme: dark)').matches;
+}
+function ink() { return isDark() ? '#ffffff' : '#0b0b0b'; }
+function inkSecondary() { return isDark() ? '#c3c2b7' : '#52514e'; }
+function gridColor() { return isDark() ? '#2c2c2a' : '#e1e0d9'; }
+function pipeColor(p) { return (isDark() ? PIPE_DARK : PIPE_LIGHT)[p]; }
+
+function allPipelines() {
+  return {
+    baseline: { best_k: DATA.baseline.best_k, best_accuracy_cv: DATA.baseline.best_accuracy_cv, final_accuracy: DATA.baseline.final_accuracy, time_s: DATA.baseline.time_s },
+    ...DATA.pipelines,
+  };
+}
+
+let charts = [];
+function destroyAll() { charts.forEach(c => c.destroy()); charts = []; }
+
+function renderK() {
+  const ks = DATA.baseline.k_values;
+  const accs = ks.map(k => DATA.baseline.mean_accuracies[String(k)]);
+  const c = new Chart(document.getElementById('chartK'), {
+    type: 'line',
+    data: { labels: ks, datasets: [
+      { label: 'Accuracy CV', data: accs, borderColor: pipeColor('baseline'), backgroundColor: pipeColor('baseline'), borderWidth: 2, pointRadius: 3, tension: 0.15 },
+    ] },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: { backgroundColor: isDark() ? '#201f1d' : '#ffffff', titleColor: ink(), bodyColor: inkSecondary(), borderColor: gridColor(), borderWidth: 1 },
+      },
+      scales: {
+        x: { title: { display: true, text: 'k', color: inkSecondary() }, ticks: { color: inkSecondary() }, grid: { color: gridColor() } },
+        y: { title: { display: true, text: 'Accuracy moyenne (CV)', color: inkSecondary() }, min: 0.7, max: 0.9,
+              ticks: { color: inkSecondary() }, grid: { color: gridColor() } },
+      },
+    },
+  });
+  charts.push(c);
+}
+
+function renderReduction() {
+  const labels = ['Avant réduction', 'Après suppr. biais', 'Après condensing'];
+  const values = [DATA.reduction.n_before, DATA.reduction.n_after_bias_removal, DATA.reduction.n_after_condensing];
+  const seq = ['#cde2fb', '#6da7ec', '#1c5cab'];
+  const c = new Chart(document.getElementById('chartReduction'), {
+    type: 'bar',
+    data: { labels, datasets: [{ data: values, backgroundColor: seq, borderRadius: 4 }] },
+    options: {
+      indexAxis: 'y',
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { min: 0, title: { display: true, text: "Nombre de points d'entraînement", color: inkSecondary() },
+              ticks: { color: inkSecondary() }, grid: { color: gridColor() } },
+        y: { ticks: { color: ink() }, grid: { display: false } },
+      },
+    },
+  });
+  charts.push(c);
+}
+
+function renderMetrics() {
+  const grid = document.getElementById('metricGrid');
+  grid.innerHTML = '';
+  const pipes = allPipelines();
+  const metrics = [
+    { key: 'final_accuracy', title: 'Accuracy (test)', fmt: v => (v*100).toFixed(1)+'%', min: 0.7, max: 0.9 },
+    { key: 'time_s', title: 'Temps de cross-validation (s)', fmt: v => v.toFixed(1)+'s', min: 0 },
+  ];
+  metrics.forEach(m => {
+    const id = 'metric_' + m.key;
+    const panel = document.createElement('div');
+    panel.className = 'metric-panel';
+    panel.innerHTML = `<h3>${m.title}</h3><div class="chart-wrap" style="height:180px"><canvas id="${id}"></canvas></div>`;
+    grid.appendChild(panel);
+    const c = new Chart(document.getElementById(id), {
+      type: 'bar',
+      data: { labels: PIPE_ORDER.map(p => PIPE_LABELS[p]), datasets: [{
+        data: PIPE_ORDER.map(p => pipes[p][m.key]),
+        backgroundColor: PIPE_ORDER.map(pipeColor), borderRadius: 4,
+      }] },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false }, tooltip: { callbacks: { label: (ctx) => m.fmt(ctx.parsed.y) } } },
+        scales: {
+          x: { ticks: { color: ink(), font: { size: 9 } }, grid: { display: false } },
+          y: { min: m.min, max: m.max, ticks: { color: inkSecondary() }, grid: { color: gridColor() } },
+        },
+      },
+    });
+    charts.push(c);
+  });
+}
+
+function renderTable() {
+  const pipes = allPipelines();
+  document.getElementById('summaryTable').innerHTML = PIPE_ORDER.map(p => {
+    const d = pipes[p];
+    return `<tr><td>${PIPE_LABELS[p]}</td><td>${d.best_k}</td><td>${(d.best_accuracy_cv*100).toFixed(1)}%</td><td>${(d.final_accuracy*100).toFixed(1)}%</td><td>${d.time_s.toFixed(1)}</td></tr>`;
+  }).join('');
+}
+
+function renderAll() {
+  destroyAll();
+  renderK();
+  renderReduction();
+  renderMetrics();
+  renderTable();
+}
+
+document.getElementById('themeToggle').addEventListener('click', () => {
+  const cur = document.documentElement.getAttribute('data-theme');
+  document.documentElement.setAttribute('data-theme', cur === 'dark' ? 'light' : 'dark');
+  renderAll();
+});
+
+renderAll();
+</script>
+</body>
+</html>
